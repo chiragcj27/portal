@@ -10,6 +10,7 @@ import {
   LogOut,
   Gem,
   Menu,
+  UploadCloud,
 } from "lucide-react";
 import { useState } from "react";
 import { clearAdminTokenFromStorage } from "@/lib/admin-auth";
@@ -17,6 +18,7 @@ import { clearAdminTokenFromStorage } from "@/lib/admin-auth";
 const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Banners", href: "/banners", icon: Image },
+  { label: "Media library", href: "/media-library", icon: UploadCloud },
   { label: "Categories", href: "/categories", icon: Tag },
   { label: "Subcategories", href: "/subcategories", icon: Layers },
   { label: "Products", href: "/products", icon: PackagePlus },

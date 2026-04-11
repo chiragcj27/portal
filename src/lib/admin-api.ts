@@ -263,6 +263,55 @@ export async function cancelUpload(params: { token: string; key: string }): Prom
   if (!res.ok) throw new Error(await parseError(res));
 }
 
+export type LibraryMediaItem = {
+  key: string;
+  publicUrl: string;
+  lastModified: string;
+  size: number;
+};
+
+export async function presignLibraryUpload(params: {
+  token: string;
+  fileName: string;
+  contentType: string;
+}): Promise<{ key: string; uploadUrl: string; publicUrl: string }> {
+  const res = await fetch(`${BACKEND_URL}/admin/uploads/library/presign`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${params.token}`,
+    },
+    body: JSON.stringify({ fileName: params.fileName, contentType: params.contentType }),
+  });
+
+  if (!res.ok) throw new Error(await parseError(res));
+  return await parseJsonOrThrow<{ key: string; uploadUrl: string; publicUrl: string }>(res);
+}
+
+export async function listLibraryMedia(params: {
+  token: string;
+  continuationToken?: string;
+}): Promise<{ items: LibraryMediaItem[]; nextContinuationToken?: string }> {
+  const searchParams = new URLSearchParams();
+  if (params.continuationToken) searchParams.set("continuationToken", params.continuationToken);
+  const query = searchParams.toString() ? `?${searchParams.toString()}` : "";
+  const res = await fetch(`${BACKEND_URL}/admin/uploads/library${query}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${params.token}` },
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return await parseJsonOrThrow<{ items: LibraryMediaItem[]; nextContinuationToken?: string }>(res);
+}
+
+export async function deleteLibraryMedia(params: { token: string; key: string }): Promise<void> {
+  const q = new URLSearchParams({ key: params.key });
+  const res = await fetch(`${BACKEND_URL}/admin/uploads/library?${q}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${params.token}` },
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+}
+
 export async function listBanners(params: { token: string }): Promise<{ banners: Banner[] }> {
   const res = await fetch(`${BACKEND_URL}/admin/banners`, {
     method: "GET",
