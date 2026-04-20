@@ -26,12 +26,21 @@ import {
 type Banner = Awaited<ReturnType<typeof listBanners>>["banners"][number];
 
 async function putToPresignedUrl(uploadUrl: string, file: File): Promise<void> {
-  const res = await fetch(uploadUrl, {
-    method: "PUT",
-    headers: { "Content-Type": file.type },
-    body: file,
-  });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  try {
+    const res = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": file.type || "application/octet-stream" },
+      body: file,
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  } catch (err) {
+    if (err instanceof TypeError) {
+      throw new Error(
+        "Image upload failed before reaching S3. This is usually a bucket CORS issue. Allow your admin portal origin for PUT/OPTIONS on S3."
+      );
+    }
+    throw err;
+  }
 }
 
 export default function BannersPage() {

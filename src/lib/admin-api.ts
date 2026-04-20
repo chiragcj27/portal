@@ -449,6 +449,40 @@ export async function createSubcategoryProfile(params: {
   return await parseJsonOrThrow<{ subcategoryProfile: SubcategoryProfile }>(res);
 }
 
+export async function updateSubcategoryProfile(params: {
+  token: string;
+  id: string;
+  name?: string;
+  displayOrder?: number;
+  isActive?: boolean;
+}): Promise<{ subcategoryProfile: SubcategoryProfile }> {
+  const res = await fetch(`${BACKEND_URL}/admin/subcategory-profiles/${params.id}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${params.token}`,
+    },
+    body: JSON.stringify({
+      name: params.name,
+      displayOrder: params.displayOrder,
+      isActive: params.isActive,
+    }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return await parseJsonOrThrow<{ subcategoryProfile: SubcategoryProfile }>(res);
+}
+
+export async function deleteSubcategoryProfile(params: {
+  token: string;
+  id: string;
+}): Promise<void> {
+  const res = await fetch(`${BACKEND_URL}/admin/subcategory-profiles/${params.id}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${params.token}` },
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+}
+
 export async function createSubcategory(params: {
   token: string;
   categoryId: string;
@@ -573,6 +607,41 @@ export async function createCategory(params: {
   });
   if (!res.ok) throw new Error(await parseError(res));
   return await parseJsonOrThrow<{ category: Category }>(res);
+}
+
+export async function updateCategory(params: {
+  token: string;
+  id: string;
+  name?: string;
+  displayOrder?: number;
+  isActive?: boolean;
+  tmpKey?: string;
+  categoryBannerTmpKeys?: string[];
+}): Promise<{ category: Category }> {
+  const res = await fetch(`${BACKEND_URL}/admin/categories/${params.id}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${params.token}`,
+    },
+    body: JSON.stringify({
+      name: params.name,
+      displayOrder: params.displayOrder,
+      isActive: params.isActive,
+      tmpKey: params.tmpKey,
+      categoryBannerTmpKeys: params.categoryBannerTmpKeys,
+    }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return await parseJsonOrThrow<{ category: Category }>(res);
+}
+
+export async function deleteCategory(params: { token: string; id: string }): Promise<void> {
+  const res = await fetch(`${BACKEND_URL}/admin/categories/${params.id}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${params.token}` },
+  });
+  if (!res.ok) throw new Error(await parseError(res));
 }
 
 export async function listProducts(params: {

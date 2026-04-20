@@ -6,11 +6,15 @@ import {
   cancelUpload,
   createCategory,
   createSubcategoryProfile,
+  deleteCategory,
+  deleteSubcategoryProfile,
   listCategories,
   listSubcategoryProfiles,
   presignCategoryUpload,
+  updateCategory,
+  updateSubcategoryProfile,
 } from "@/lib/admin-api";
-import { clearAdminTokenFromStorage, getAdminTokenFromStorage } from "@/lib/admin-auth";
+import { getAdminTokenFromStorage } from "@/lib/admin-auth";
 import AdminShell from "@/components/AdminShell";
 import {
   PlusCircle,
@@ -18,18 +22,30 @@ import {
   AlertCircle,
   ImageIcon,
   LayoutGrid,
+  Pencil,
+  Trash2,
+  X,
 } from "lucide-react";
 
 type Category = Awaited<ReturnType<typeof listCategories>>["categories"][number];
 type SubcategoryProfile = Awaited<ReturnType<typeof listSubcategoryProfiles>>["subcategoryProfiles"][number];
 
 async function putToPresignedUrl(uploadUrl: string, file: File): Promise<void> {
-  const res = await fetch(uploadUrl, {
-    method: "PUT",
-    headers: { "Content-Type": file.type },
-    body: file,
-  });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  try {
+    const res = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": file.type || "application/octet-stream" },
+      body: file,
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  } catch (err) {
+    if (err instanceof TypeError) {
+      throw new Error(
+        "Image upload failed before reaching S3. This is usually a bucket CORS issue. Allow your admin portal origin for PUT/OPTIONS on S3."
+      );
+    }
+    throw err;
+  }
 }
 
 export default function CategoriesPage() {
@@ -50,12 +66,14 @@ export default function CategoriesPage() {
   const [profileIsActive, setProfileIsActive] = useState(true);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
 
   const [name, setName] = useState("");
   const [displayOrder, setDisplayOrder] = useState<number>(0);
   const [isActive, setIsActive] = useState(true);
   const [file, setFile] = useState<File | null>(null);
   const [bannerFiles, setBannerFiles] = useState<File[]>([]);
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
 
   const canSubmit = useMemo(() => !!token && !loading, [token, loading]);
 
@@ -85,10 +103,28 @@ export default function CategoriesPage() {
     });
   }, [token]);
 
-  async function onCreate(e: React.FormEvent) {
+  function resetCategoryForm() {
+    setEditingCategoryId(null);
+    setName("");
+    setDisplayOrder(0);
+    setIsActive(true);
+    setFile(null);
+    setBannerFiles([]);
+  }
+
+  function resetProfileForm() {
+    setEditingProfileId(null);
+    setAddingProfileCategoryId(null);
+    setProfileName("");
+    setProfileDisplayOrder(0);
+    setProfileIsActive(true);
+    setProfileError(null);
+  }
+
+  async function onSaveCategory(e: React.FormEvent) {
     e.preventDefault();
     if (!token) return;
-    if (!file) {
+    if (!editingCategoryId && !file) {
       setError("Please choose an image file");
       return;
     }
@@ -99,13 +135,15 @@ export default function CategoriesPage() {
     let tmpKey: string | null = null;
     const bannerTmpKeys: string[] = [];
     try {
-      const presigned = await presignCategoryUpload({
-        token,
-        fileName: file.name,
-        contentType: file.type || "application/octet-stream",
-      });
-      tmpKey = presigned.key;
-      await putToPresignedUrl(presigned.uploadUrl, file);
+      if (file) {
+        const presigned = await presignCategoryUpload({
+          token,
+          fileName: file.name,
+          contentType: file.type || "application/octet-stream",
+        });
+        tmpKey = presigned.key;
+        await putToPresignedUrl(presigned.uploadUrl, file);
+      }
 
       for (const bannerFile of bannerFiles) {
         const bannerPresigned = await presignCategoryUpload({
@@ -117,20 +155,28 @@ export default function CategoriesPage() {
         await putToPresignedUrl(bannerPresigned.uploadUrl, bannerFile);
       }
 
-      await createCategory({
-        token,
-        name,
-        displayOrder,
-        isActive,
-        tmpKey,
-        categoryBannerTmpKeys: bannerTmpKeys,
-      });
+      if (editingCategoryId) {
+        await updateCategory({
+          token,
+          id: editingCategoryId,
+          name,
+          displayOrder,
+          isActive,
+          tmpKey: tmpKey ?? undefined,
+          categoryBannerTmpKeys: bannerTmpKeys,
+        });
+      } else {
+        await createCategory({
+          token,
+          name,
+          displayOrder,
+          isActive,
+          tmpKey: tmpKey as string,
+          categoryBannerTmpKeys: bannerTmpKeys,
+        });
+      }
 
-      setName("");
-      setDisplayOrder(0);
-      setIsActive(true);
-      setFile(null);
-      setBannerFiles([]);
+      resetCategoryForm();
       await refresh(token);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Request failed";
@@ -146,7 +192,7 @@ export default function CategoriesPage() {
     }
   }
 
-  async function onCreateSubcategoryProfile(e: React.FormEvent) {
+  async function onSaveSubcategoryProfile(e: React.FormEvent) {
     e.preventDefault();
     if (!token || !addingProfileCategoryId) return;
 
@@ -159,22 +205,82 @@ export default function CategoriesPage() {
     setProfileSaving(true);
     setProfileError(null);
     try {
-      await createSubcategoryProfile({
-        token,
-        categoryId: addingProfileCategoryId,
-        name: trimmedName,
-        displayOrder: profileDisplayOrder,
-        isActive: profileIsActive,
-      });
+      if (editingProfileId) {
+        await updateSubcategoryProfile({
+          token,
+          id: editingProfileId,
+          name: trimmedName,
+          displayOrder: profileDisplayOrder,
+          isActive: profileIsActive,
+        });
+      } else {
+        await createSubcategoryProfile({
+          token,
+          categoryId: addingProfileCategoryId,
+          name: trimmedName,
+          displayOrder: profileDisplayOrder,
+          isActive: profileIsActive,
+        });
+      }
 
-      setProfileName("");
-      setProfileDisplayOrder(0);
-      setProfileIsActive(true);
-      setAddingProfileCategoryId(null);
+      resetProfileForm();
       await refresh(token);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Request failed";
       setProfileError(message);
+    } finally {
+      setProfileSaving(false);
+    }
+  }
+
+  function onEditCategory(category: Category) {
+    setEditingCategoryId(category._id);
+    setName(category.name);
+    setDisplayOrder(category.displayOrder);
+    setIsActive(category.isActive);
+    setFile(null);
+    setBannerFiles([]);
+    setError(null);
+  }
+
+  async function onDeleteCategory(category: Category) {
+    if (!token) return;
+    const ok = confirm(`Delete category "${category.name}"?`);
+    if (!ok) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await deleteCategory({ token, id: category._id });
+      if (editingCategoryId === category._id) resetCategoryForm();
+      await refresh(token);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Request failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function onEditProfile(categoryId: string, profile: SubcategoryProfile) {
+    setAddingProfileCategoryId(categoryId);
+    setEditingProfileId(profile._id);
+    setProfileName(profile.name);
+    setProfileDisplayOrder(profile.displayOrder);
+    setProfileIsActive(profile.isActive);
+    setProfileError(null);
+  }
+
+  async function onDeleteProfile(profile: SubcategoryProfile) {
+    if (!token) return;
+    const ok = confirm(`Delete profile "${profile.name}"?`);
+    if (!ok) return;
+    setProfileSaving(true);
+    setProfileError(null);
+    try {
+      await deleteSubcategoryProfile({ token, id: profile._id });
+      if (editingProfileId === profile._id) resetProfileForm();
+      await refresh(token);
+    } catch (err) {
+      setProfileError(err instanceof Error ? err.message : "Request failed");
     } finally {
       setProfileSaving(false);
     }
@@ -186,14 +292,16 @@ export default function CategoriesPage() {
         {/* Form column */}
         <div className="lg:col-span-2">
           <div className="mb-4">
-            <h2 className="text-base font-semibold text-slate-900">Add category</h2>
+            <h2 className="text-base font-semibold text-slate-900">
+              {editingCategoryId ? "Edit category" : "Add category"}
+            </h2>
             <p className="mt-0.5 text-sm text-slate-500">
               Create a new category with a thumbnail and optional banners.
             </p>
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-            <form onSubmit={onCreate} className="space-y-5">
+            <form onSubmit={onSaveCategory} className="space-y-5">
               <div className="space-y-1.5">
                 <label className="block text-sm font-medium text-slate-700">Name</label>
                 <input
@@ -240,7 +348,7 @@ export default function CategoriesPage() {
                     type="file"
                     accept="image/*"
                     onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                    required
+                    required={!editingCategoryId}
                   />
                 </div>
                 {file && (
@@ -277,8 +385,18 @@ export default function CategoriesPage() {
                 type="submit"
               >
                 <PlusCircle className="h-4 w-4" />
-                {loading ? "Saving…" : "Create category"}
+                {loading ? "Saving…" : editingCategoryId ? "Update category" : "Create category"}
               </button>
+              {editingCategoryId && (
+                <button
+                  type="button"
+                  onClick={resetCategoryForm}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50"
+                >
+                  <X className="h-4 w-4" />
+                  Cancel edit
+                </button>
+              )}
             </form>
           </div>
         </div>
@@ -338,6 +456,26 @@ export default function CategoriesPage() {
                       {c.isActive ? "Active" : "Inactive"}
                     </span>
                   </div>
+                  <div className="mt-3 flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition-colors hover:bg-slate-50 disabled:opacity-60"
+                      disabled={loading}
+                      onClick={() => onEditCategory(c)}
+                    >
+                      <Pencil className="h-3 w-3" />
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="flex items-center gap-1.5 rounded-lg border border-red-100 bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-600 shadow-sm transition-colors hover:bg-red-100 disabled:opacity-60"
+                      disabled={loading}
+                      onClick={() => onDeleteCategory(c)}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      Delete
+                    </button>
+                  </div>
 
                   {c.categoryBannerImages.length > 0 && (
                     <div className="mt-3 grid grid-cols-3 gap-2">
@@ -367,6 +505,7 @@ export default function CategoriesPage() {
                         disabled={!token || profileSaving}
                         onClick={() => {
                           setAddingProfileCategoryId((prev) => (prev === c._id ? null : c._id));
+                          setEditingProfileId(null);
                           setProfileName("");
                           setProfileDisplayOrder(0);
                           setProfileIsActive(true);
@@ -393,20 +532,40 @@ export default function CategoriesPage() {
                               <p className="truncate text-sm font-medium text-slate-900">{p.name}</p>
                               <p className="mt-0.5 text-xs text-slate-500">Order: {p.displayOrder}</p>
                             </div>
-                            <span
-                              className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                                p.isActive ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-500"
-                              }`}
-                            >
-                              {p.isActive ? "Active" : "Inactive"}
-                            </span>
+                            <div className="flex shrink-0 items-center gap-2">
+                              <span
+                                className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                                  p.isActive ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-500"
+                                }`}
+                              >
+                                {p.isActive ? "Active" : "Inactive"}
+                              </span>
+                              <button
+                                type="button"
+                                className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition-colors hover:bg-slate-50 disabled:opacity-60"
+                                onClick={() => onEditProfile(c._id, p)}
+                                disabled={profileSaving}
+                              >
+                                <Pencil className="h-3 w-3" />
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                className="flex items-center gap-1.5 rounded-lg border border-red-100 bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-600 shadow-sm transition-colors hover:bg-red-100 disabled:opacity-60"
+                                onClick={() => onDeleteProfile(p)}
+                                disabled={profileSaving}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                                Delete
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>
                     )}
 
                     {addingProfileCategoryId === c._id && (
-                      <form onSubmit={onCreateSubcategoryProfile} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+                      <form onSubmit={onSaveSubcategoryProfile} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
                         <div className="space-y-1.5">
                           <label className="block text-sm font-medium text-slate-700">Profile name</label>
                           <input
@@ -458,15 +617,12 @@ export default function CategoriesPage() {
                             className="flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:opacity-60"
                             disabled={!token || profileSaving || !profileName.trim()}
                           >
-                            {profileSaving ? "Saving…" : "Create profile"}
+                            {profileSaving ? "Saving…" : editingProfileId ? "Update profile" : "Create profile"}
                           </button>
                           <button
                             type="button"
                             className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 shadow-sm transition-colors hover:bg-slate-50"
-                            onClick={() => {
-                              setAddingProfileCategoryId(null);
-                              setProfileError(null);
-                            }}
+                            onClick={resetProfileForm}
                           >
                             Cancel
                           </button>
