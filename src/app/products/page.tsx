@@ -8,6 +8,7 @@ import {
   deleteProduct,
   listCategories,
   listProducts,
+  listStoneShapes,
   listSubcategoryProfiles,
   listSubcategories,
   updateProduct,
@@ -74,6 +75,7 @@ export default function ProductsPage() {
   const [isBestSeller, setIsBestSeller] = useState(false);
   const [isReadyToShip, setIsReadyToShip] = useState(false);
   const [selectedFilters, setSelectedFilters] = useState<Record<string, string | string[]>>({});
+  const [stoneShapes, setStoneShapes] = useState<Array<{ _id: string; name: string }>>([]);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -145,6 +147,10 @@ export default function ProductsPage() {
     () => selectedSubcategory?.filterSchema ?? EMPTY_FILTER_SCHEMA,
     [selectedSubcategory],
   );
+  const isRingCategory = useMemo(
+    () => categories.find((c) => c._id === selectedCategoryId)?.name.toLowerCase().includes("ring") ?? false,
+    [categories, selectedCategoryId],
+  );
 
   const canCreate = useMemo(
     () =>
@@ -161,6 +167,8 @@ export default function ProductsPage() {
   async function refreshCategoriesAndProducts(t: string) {
     const categoryData = await listCategories({ token: t });
     setCategories(categoryData.categories);
+    const stoneShapeData = await listStoneShapes({ token: t });
+    setStoneShapes(stoneShapeData.stoneShapes.map((shape) => ({ _id: shape._id, name: shape.name })));
     const nextCategoryId = selectedCategoryId || categoryData.categories[0]?._id || "";
     setSelectedCategoryId(nextCategoryId);
     if (!nextCategoryId) {
@@ -277,8 +285,9 @@ export default function ProductsPage() {
     for (const field of filterSchema) {
       defaults[field.key] = field.type === "multi_chips" ? [] : "";
     }
+    if (isRingCategory) defaults.stoneShape = "";
     setSelectedFilters(defaults);
-  }, [selectedSubcategoryId, filterSchema]);
+  }, [selectedSubcategoryId, filterSchema, isRingCategory]);
 
   async function onCreateProduct(e: React.FormEvent) {
     e.preventDefault();
@@ -322,6 +331,11 @@ export default function ProductsPage() {
           if (Array.isArray(entry.filterValue)) return entry.filterValue.length > 0;
           return Boolean(entry.filterValue);
         });
+      const selectedStoneShape =
+        typeof selectedFilters.stoneShape === "string" ? selectedFilters.stoneShape.trim() : "";
+      if (isRingCategory && selectedStoneShape) {
+        filterPayload.push({ filterName: "stoneShape", filterValue: selectedStoneShape });
+      }
 
       const payload = {
         token,
@@ -988,6 +1002,23 @@ export default function ProductsPage() {
                     {renderFilterField(field)}
                   </div>
                 ))}
+              </div>
+            )}
+            {isRingCategory && (
+              <div className="space-y-1.5">
+                <label className="block text-sm font-medium text-slate-700">Stone Shape</label>
+                <select
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm"
+                  value={typeof selectedFilters.stoneShape === "string" ? (selectedFilters.stoneShape as string) : ""}
+                  onChange={(e) => setSelectedFilters((prev) => ({ ...prev, stoneShape: e.target.value }))}
+                >
+                  <option value="">Select stone shape</option>
+                  {stoneShapes.map((shape) => (
+                    <option key={shape._id} value={shape.name}>
+                      {shape.name}
+                    </option>
+                  ))}
+                </select>
               </div>
             )}
 

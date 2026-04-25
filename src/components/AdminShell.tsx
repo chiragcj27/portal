@@ -11,6 +11,7 @@ import {
   Gem,
   Menu,
   UploadCloud,
+  Diamond,
 } from "lucide-react";
 import { useState } from "react";
 import { clearAdminTokenFromStorage } from "@/lib/admin-auth";
@@ -22,6 +23,7 @@ const navItems = [
   { label: "Categories", href: "/categories", icon: Tag },
   { label: "Subcategories", href: "/subcategories", icon: Layers },
   { label: "Products", href: "/products", icon: PackagePlus },
+  { label: "Stone Shapes", href: "/stone-shapes", icon: Diamond },
 ];
 
 export default function AdminShell({ children, title }: { children: React.ReactNode; title: string }) {

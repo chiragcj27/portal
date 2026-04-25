@@ -107,6 +107,16 @@ type Product = {
   updatedAt: string;
 };
 
+type StoneShape = {
+  _id: string;
+  name: string;
+  thumbnailImage: string;
+  displayOrder: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 type ErrorResponse = {
   error?: string;
   /** Excel row number (e.g. bulk upload layout errors). */
@@ -789,6 +799,67 @@ export async function updateProduct(params: {
 
 export async function deleteProduct(params: { token: string; id: string }): Promise<void> {
   const res = await fetch(`${BACKEND_URL}/admin/products/${params.id}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${params.token}` },
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+}
+
+export async function listStoneShapes(params: { token: string }): Promise<{ stoneShapes: StoneShape[] }> {
+  const res = await fetch(`${BACKEND_URL}/admin/stone-shapes`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${params.token}` },
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return await parseJsonOrThrow<{ stoneShapes: StoneShape[] }>(res);
+}
+
+export async function createStoneShape(params: {
+  token: string;
+  name: string;
+  thumbnailImage: string;
+  displayOrder?: number;
+  isActive?: boolean;
+}): Promise<{ stoneShape: StoneShape }> {
+  const res = await fetch(`${BACKEND_URL}/admin/stone-shapes`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${params.token}`,
+    },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return await parseJsonOrThrow<{ stoneShape: StoneShape }>(res);
+}
+
+export async function updateStoneShape(params: {
+  token: string;
+  id: string;
+  name?: string;
+  thumbnailImage?: string;
+  displayOrder?: number;
+  isActive?: boolean;
+}): Promise<{ stoneShape: StoneShape }> {
+  const res = await fetch(`${BACKEND_URL}/admin/stone-shapes/${params.id}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${params.token}`,
+    },
+    body: JSON.stringify({
+      name: params.name,
+      thumbnailImage: params.thumbnailImage,
+      displayOrder: params.displayOrder,
+      isActive: params.isActive,
+    }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return await parseJsonOrThrow<{ stoneShape: StoneShape }>(res);
+}
+
+export async function deleteStoneShape(params: { token: string; id: string }): Promise<void> {
+  const res = await fetch(`${BACKEND_URL}/admin/stone-shapes/${params.id}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${params.token}` },
   });
