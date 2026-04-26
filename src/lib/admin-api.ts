@@ -117,6 +117,78 @@ type StoneShape = {
   updatedAt: string;
 };
 
+export type OrderStatus =
+  | "order_received"
+  | "order_confirmed"
+  | "order_in_production"
+  | "order_shipped"
+  | "order_delivered"
+  | "order_cancelled";
+
+export type AdminOrder = {
+  _id: string;
+  orderNumber: string;
+  clientId: string;
+  clientName: string;
+  clientUsername: string;
+  status: OrderStatus;
+  items: Array<{
+    productId?: string;
+    styleNo?: string;
+    title?: string;
+    imageUrl?: string;
+    quantity: number;
+    unitPrice?: number;
+    lineTotal?: number;
+    remarks?: string;
+    meta?: {
+      productSnapshot?: {
+        productId?: string;
+        styleNo?: string;
+        categoryId?: string;
+        categoryName?: string;
+        subcategoryId?: string;
+        subcategoryName?: string;
+        subcategoryProfileId?: string;
+        subcategoryProfileName?: string;
+        makeType?: string;
+        description?: string;
+        remarks?: string;
+        pointer?: number;
+        totalDiamondWeightCt?: number;
+        totalDiamondPcs?: number;
+        filter?: Array<{ filterName: string; filterValue: string | string[] }>;
+        metalWeights?: Product["metalWeights"];
+        images?: string[];
+      } | null;
+      [key: string]: unknown;
+    };
+  }>;
+  billingAddress?: string;
+  shippingAddress?: string;
+  notes?: string;
+  currency?: string;
+  totalAmount?: number;
+  orderMeta?: Record<string, unknown> & {
+    shipmentTracking?: {
+      sourceCity: string;
+      destinationCity: string;
+      logisticsName: string;
+      logisticsId: string;
+      awbNo: string;
+      noOfPcs: number;
+    };
+  };
+  timeline: Array<{
+    status: OrderStatus;
+    changedAt: string;
+    changedBy: { id: string; role: "admin" | "client" };
+    note?: string;
+  }>;
+  createdAt: string;
+  updatedAt: string;
+};
+
 type ErrorResponse = {
   error?: string;
   /** Excel row number (e.g. bulk upload layout errors). */
@@ -864,5 +936,82 @@ export async function deleteStoneShape(params: { token: string; id: string }): P
     headers: { Authorization: `Bearer ${params.token}` },
   });
   if (!res.ok) throw new Error(await parseError(res));
+}
+
+export async function listAdminOrders(params: {
+  token: string;
+  status?: OrderStatus;
+  clientId?: string;
+}): Promise<{ orders: AdminOrder[] }> {
+  const searchParams = new URLSearchParams();
+  if (params.status) searchParams.set("status", params.status);
+  if (params.clientId) searchParams.set("clientId", params.clientId);
+  const query = searchParams.toString() ? `?${searchParams.toString()}` : "";
+
+  const res = await fetch(`${BACKEND_URL}/admin/orders${query}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${params.token}` },
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return await parseJsonOrThrow<{ orders: AdminOrder[] }>(res);
+}
+
+export async function getAdminOrderById(params: {
+  token: string;
+  id: string;
+}): Promise<{ order: AdminOrder }> {
+  const res = await fetch(`${BACKEND_URL}/admin/orders/${params.id}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${params.token}` },
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return await parseJsonOrThrow<{ order: AdminOrder }>(res);
+}
+
+export async function updateAdminOrderStatus(params: {
+  token: string;
+  id: string;
+  status: Exclude<OrderStatus, "order_cancelled">;
+  note?: string;
+  shipmentTracking?: {
+    sourceCity: string;
+    destinationCity: string;
+    logisticsName: string;
+    logisticsId: string;
+    awbNo: string;
+    noOfPcs: number;
+  };
+}): Promise<{ order: AdminOrder }> {
+  const res = await fetch(`${BACKEND_URL}/admin/orders/${params.id}/status`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${params.token}`,
+    },
+    body: JSON.stringify({
+      status: params.status,
+      note: params.note,
+      shipmentTracking: params.shipmentTracking,
+    }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return await parseJsonOrThrow<{ order: AdminOrder }>(res);
+}
+
+export async function cancelAdminOrder(params: {
+  token: string;
+  id: string;
+  note?: string;
+}): Promise<{ order: AdminOrder }> {
+  const res = await fetch(`${BACKEND_URL}/admin/orders/${params.id}/cancel`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${params.token}`,
+    },
+    body: JSON.stringify({ note: params.note }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return await parseJsonOrThrow<{ order: AdminOrder }>(res);
 }
 
